@@ -243,7 +243,9 @@
 
   <div class="ctrl-row">
     <button class="ctrl-btn" id="addSpaceBtn">➕ Add More Space</button>
+    <button class="ctrl-btn" id="removeSpaceBtn">➖ Remove Space</button>
     <button class="ctrl-btn" id="addHeightBtn">⬆️ Add More Height</button>
+    <button class="ctrl-btn" id="removeHeightBtn">⬇️ Remove Height</button>
     <button class="ctrl-btn" id="saveLevelBtn">💾 Save Level</button>
     <button class="ctrl-btn" id="clearLevelBtn">🔄 Clear Level</button>
   </div>
@@ -268,6 +270,7 @@
 
   <script>
     var COLS = 40, ROWS = 9, CELL = 32;
+    var MIN_COLS = 10, MIN_ROWS = 5;
     var LEVEL_W = COLS * CELL, LEVEL_H = ROWS * CELL;
     var STORAGE_KEY = "bensLevelBuilderLevel";
 
@@ -346,6 +349,25 @@
       rebuildGrid();
     }
 
+    function removeColumns(n) {
+      var newCols = Math.max(MIN_COLS, COLS - n);
+      if (newCols === COLS) return;
+      for (var r = 0; r < ROWS; r++) levelData[r].length = newCols;
+      COLS = newCols;
+      LEVEL_W = COLS * CELL;
+      rebuildGrid();
+    }
+
+    function removeRows(n) {
+      var newRows = Math.max(MIN_ROWS, ROWS - n);
+      var removeCount = ROWS - newRows;
+      if (removeCount <= 0) return;
+      for (var i = 0; i < removeCount; i++) levelData.shift();
+      ROWS = newRows;
+      LEVEL_H = ROWS * CELL;
+      rebuildGrid();
+    }
+
     function renderCell(row, col) {
       var tile = levelData[row][col];
       var btn = cellButtons[row][col];
@@ -417,8 +439,14 @@
     document.getElementById("addSpaceBtn").addEventListener("click", function () {
       addColumns(10);
     });
+    document.getElementById("removeSpaceBtn").addEventListener("click", function () {
+      removeColumns(10);
+    });
     document.getElementById("addHeightBtn").addEventListener("click", function () {
       addRows(5);
+    });
+    document.getElementById("removeHeightBtn").addEventListener("click", function () {
+      removeRows(5);
     });
 
     loadLevel();
