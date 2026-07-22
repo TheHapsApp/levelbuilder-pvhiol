@@ -389,6 +389,7 @@
       playHud.style.display = "none";
       touchControls.style.display = "none";
       clearEntityEls();
+      renderAllCells(); // restore any enemy glyphs that were hidden while playing
       levelWrap.scrollLeft = 0;
       document.getElementById("winOverlay").classList.remove("show");
       document.getElementById("loseOverlay").classList.remove("show");
@@ -427,6 +428,8 @@
     var startCol = 1, startRow = ROWS - 2;
     var playerEl = null;
     var entityEls = [];
+    var activeEnemies = []; // {x, y, vx, vy, w, h, el, alive}
+    var ENEMY_SPEED = 1;
 
     var keys = { left: false, right: false, jump: false };
     document.addEventListener("keydown", function (e) {
@@ -456,6 +459,72 @@
       if (playerEl) { playerEl.remove(); playerEl = null; }
       entityEls.forEach(function (el) { el.remove(); });
       entityEls = [];
+      activeEnemies.forEach(function (e) { if (e.el) e.el.remove(); });
+      activeEnemies = [];
+    }
+
+    function buildActiveEnemies() {
+      for (var r = 0; r < ROWS; r++) {
+        for (var c = 0; c < COLS; c++) {
+          if (levelData[r][c] === "enemy") {
+            cellButtons[r][c].textContent = ""; // hide the static glyph — the moving one represents it now
+            var el = document.createElement("div");
+            el.className = "entity";
+            el.textContent = "🐛";
+            levelEl.appendChild(el);
+            activeEnemies.push({
+              x: c * CELL + 4, y: r * CELL + 4,
+              vx: (Math.random() < 0.5 ? -1 : 1) * ENEMY_SPEED,
+              vy: 0, w: CELL - 8, h: CELL - 8,
+              el: el, alive: true
+            });
+          }
+        }
+      }
+    }
+
+    function updateEnemies() {
+      activeEnemies.forEach(function (e) {
+        if (!e.alive) return;
+
+        e.x += e.vx;
+        if (collidesSolid(e.x, e.y, e.w, e.h)) {
+          e.x -= e.vx;
+          e.vx *= -1;
+        }
+
+        e.vy += GRAVITY;
+        e.y += e.vy;
+        if (collidesSolid(e.x, e.y, e.w, e.h)) {
+          if (e.vy > 0) {
+            e.y = Math.floor((e.y + e.h) / CELL) * CELL - e.h;
+            e.vy = 0;
+          } else if (e.vy < 0) {
+            e.y = Math.ceil(e.y / CELL) * CELL;
+            e.vy = 0;
+          }
+        }
+
+        e.el.style.left = e.x + "px";
+        e.el.style.top = e.y + "px";
+      });
+    }
+
+    function checkEnemyCollisions(prevBottom, fallingThisFrame) {
+      activeEnemies.forEach(function (e) {
+        if (!e.alive) return;
+        if (rectsOverlap(player.x, player.y, PW, PH, e.x, e.y, e.w, e.h)) {
+          if (fallingThisFrame && prevBottom <= e.y + 6) {
+            e.alive = false;
+            e.el.remove();
+            player.vy = JUMP_VELOCITY * 0.6;
+            score += 2;
+            updateHud();
+          } else if (!invulnerable) {
+            loseLife();
+          }
+        }
+      });
     }
 
     function findFirstTile(type) {
@@ -496,6 +565,7 @@
     function startPlay() {
       if (rafId) cancelAnimationFrame(rafId);
       clearEntityEls();
+      buildActiveEnemies();
       var startTile = findFirstTile("start");
       startCol = startTile ? startTile.col : 1;
       startRow = startTile ? startTile.row : ROWS - 2;
@@ -543,7 +613,7 @@
       }
     }
 
-    function checkEntityCollisions(prevBottom, fallingThisFrame) {
+    function checkEntityCollisions() {
       for (var r = 0; r < ROWS; r++) {
         for (var c = 0; c < COLS; c++) {
           var tile = levelData[r][c];
@@ -556,18 +626,6 @@
               renderCell(r, c);
               score++;
               updateHud();
-            }
-          } else if (tile === "enemy") {
-            if (rectsOverlap(player.x, player.y, PW, PH, tx + 2, ty + 2, CELL - 4, CELL - 4)) {
-              if (fallingThisFrame && prevBottom <= ty + 6) {
-                levelData[r][c] = null;
-                renderCell(r, c);
-                player.vy = JUMP_VELOCITY * 0.6;
-                score += 2;
-                updateHud();
-              } else if (!invulnerable) {
-                loseLife();
-              }
             }
           } else if (tile === "goal") {
             if (rectsOverlap(player.x, player.y, PW, PH, tx, ty, CELL, CELL)) {
@@ -620,7 +678,9 @@
         loseLife();
       }
 
-      checkEntityCollisions(prevBottom, fallingThisFrame);
+      checkEntityCollisions();
+      updateEnemies();
+      checkEnemyCollisions(prevBottom, fallingThisFrame);
 
       if (playerEl) {
         playerEl.style.left = player.x + "px";
