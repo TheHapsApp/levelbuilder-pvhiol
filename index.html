@@ -114,7 +114,7 @@
       background: repeating-linear-gradient(0deg, #d9702e, #d9702e 14px, #b85a20 14px, #b85a20 16px);
       border-color: rgba(0,0,0,0.25);
     }
-    .cell.tile-coin, .cell.tile-enemy, .cell.tile-start, .cell.tile-goal { border-color: transparent; }
+    .cell.tile-coin, .cell.tile-enemy, .cell.tile-start, .cell.tile-goal, .cell.tile-checkpoint { border-color: transparent; }
 
     .entity {
       position: absolute;
@@ -211,6 +211,7 @@
     <button class="tile-btn" data-tile="enemy">🐛 Enemy</button>
     <button class="tile-btn" data-tile="start">🟢 Start</button>
     <button class="tile-btn" data-tile="goal">🏁 Goal</button>
+    <button class="tile-btn" data-tile="checkpoint">🚩 Checkpoint</button>
     <button class="tile-btn" data-tile="eraser">🧹 Eraser</button>
   </div>
 
@@ -224,11 +225,11 @@
   </div>
 
   <div class="touch-controls" id="touchControls">
-    <button class="touch-btn" id="leftBtn">◀️</button>
+    <button class="touch-btn" id="stopGoBtn">⏸️</button>
     <button class="touch-btn" id="jumpBtn">⬆️</button>
-    <button class="touch-btn" id="rightBtn">▶️</button>
   </div>
-  <p class="hint" id="buildHint">Pick a tile above, then tap the level to place it!</p>
+  <p class="hint" id="buildHint">Pick a tile above, then tap the level to place it! 🚩 Checkpoints save your spot.</p>
+  <p class="hint" id="playHint" style="display:none;">🐸 runs by itself — press <b>Space</b> to jump, and <b>S</b> to stop or go!</p>
 
   <div class="ctrl-row">
     <button class="ctrl-btn" id="saveLevelBtn">💾 Save Level</button>
@@ -269,6 +270,7 @@
       data[ROWS - 2][11] = "coin";
       data[ROWS - 2][12] = "coin";
       data[ROWS - 2][20] = "enemy";
+      data[ROWS - 2][30] = "checkpoint";
       return data;
     }
 
@@ -279,7 +281,7 @@
     levelEl.style.width = LEVEL_W + "px";
     levelEl.style.height = LEVEL_H + "px";
 
-    var TILE_EMOJI = { coin: "🪙", enemy: "🐛", start: "🟢", goal: "🏁" };
+    var TILE_EMOJI = { coin: "🪙", enemy: "🐛", start: "🟢", goal: "🏁", checkpoint: "🚩" };
 
     var cellButtons = []; // cellButtons[row][col]
 
@@ -376,6 +378,7 @@
     var playModeBtn = document.getElementById("playModeBtn");
     var palette = document.getElementById("palette");
     var buildHint = document.getElementById("buildHint");
+    var playHint = document.getElementById("playHint");
     var playHud = document.getElementById("playHud");
     var touchControls = document.getElementById("touchControls");
 
@@ -386,6 +389,7 @@
       playModeBtn.classList.remove("active");
       palette.style.display = "flex";
       buildHint.style.display = "block";
+      playHint.style.display = "none";
       playHud.style.display = "none";
       touchControls.style.display = "none";
       clearEntityEls();
@@ -401,6 +405,7 @@
       playModeBtn.classList.add("active");
       palette.style.display = "none";
       buildHint.style.display = "none";
+      playHint.style.display = "block";
       playHud.style.display = "flex";
       touchControls.style.display = "flex";
       startPlay();
@@ -431,15 +436,20 @@
     var activeEnemies = []; // {x, y, vx, vy, w, h, el, alive}
     var ENEMY_SPEED = 1;
 
-    var keys = { left: false, right: false, jump: false };
+    var keys = { jump: false };
+    var moving = true; // the froggy auto-runs; "S" toggles this on/off
+    var stopGoBtn = document.getElementById("stopGoBtn");
+
+    function toggleMoving() {
+      moving = !moving;
+      stopGoBtn.textContent = moving ? "⏸️" : "▶️";
+    }
+
     document.addEventListener("keydown", function (e) {
-      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") keys.left = true;
-      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") keys.right = true;
-      if (e.key === "ArrowUp" || e.key === " " || e.key === "w" || e.key === "W") keys.jump = true;
+      if (e.key === "ArrowUp" || e.key === " " || e.key === "w" || e.key === "W") { e.preventDefault(); keys.jump = true; }
+      if ((e.key === "s" || e.key === "S") && !e.repeat) toggleMoving();
     });
     document.addEventListener("keyup", function (e) {
-      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") keys.left = false;
-      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") keys.right = false;
       if (e.key === "ArrowUp" || e.key === " " || e.key === "w" || e.key === "W") keys.jump = false;
     });
 
@@ -451,9 +461,8 @@
       el.addEventListener("touchstart", function (e) { e.preventDefault(); keys[keyName] = true; }, { passive: false });
       el.addEventListener("touchend", function (e) { e.preventDefault(); keys[keyName] = false; }, { passive: false });
     }
-    bindTouchBtn("leftBtn", "left");
-    bindTouchBtn("rightBtn", "right");
     bindTouchBtn("jumpBtn", "jump");
+    stopGoBtn.addEventListener("click", function () { toggleMoving(); });
 
     function clearEntityEls() {
       if (playerEl) { playerEl.remove(); playerEl = null; }
@@ -577,6 +586,8 @@
       score = 0;
       lives = 3;
       invulnerable = false;
+      moving = true;
+      stopGoBtn.textContent = "⏸️";
       updateHud();
 
       playerEl = document.createElement("div");
@@ -633,6 +644,11 @@
               document.getElementById("winStats").textContent = "🪙 " + score + " coins collected!";
               document.getElementById("winOverlay").classList.add("show");
             }
+          } else if (tile === "checkpoint") {
+            if (rectsOverlap(player.x, player.y, PW, PH, tx, ty, CELL, CELL)) {
+              startCol = c;
+              startRow = r;
+            }
           }
         }
       }
@@ -643,9 +659,7 @@
 
       var prevBottom = player.y + PH;
 
-      var vx = 0;
-      if (keys.left) vx -= MOVE_SPEED;
-      if (keys.right) vx += MOVE_SPEED;
+      var vx = moving ? MOVE_SPEED : 0;
 
       player.x += vx;
       if (collidesSolid(player.x, player.y, PW, PH)) {
