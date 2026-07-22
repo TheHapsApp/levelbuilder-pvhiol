@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <!-- Keep this page off Google so it stays our secret -->
+  <meta name="robots" content="noindex, nofollow">
+  <title>Ben's Level Builder</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%A7%B1%3C/text%3E%3C/svg%3E">
+  <style>
+    :root {
+      --p1: #ff5fa2;
+      --p2: #ffd23f;
+      --p3: #3fd0ff;
+      --p4: #8a5cff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-user-select: none; user-select: none; }
+    html, body { height: 100%; }
+    body {
+      font-family: "Comic Sans MS", "Trebuchet MS", system-ui, sans-serif;
+      min-height: 100vh;
+      color: #fff;
+      text-align: center;
+      background: linear-gradient(120deg, var(--p4), var(--p1), var(--p2), var(--p3));
+      background-size: 400% 400%;
+      animation: flow 16s ease infinite;
+      padding: 22px 12px 50px;
+    }
+    @keyframes flow {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    h1 {
+      font-size: clamp(1.5rem, 6vw, 2.3rem);
+      text-shadow: 3px 3px 0 rgba(0,0,0,0.2);
+    }
+    .sub {
+      font-size: clamp(0.85rem, 3vw, 1.05rem);
+      margin: 6px 0 16px;
+      text-shadow: 1px 1px 0 rgba(0,0,0,0.15);
+    }
+
+    /* ---- Mode + palette ---- */
+    .mode-row, .ctrl-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .mode-btn, .ctrl-btn {
+      font-family: inherit;
+      font-size: 1rem;
+      font-weight: bold;
+      color: #fff;
+      background: rgba(255,255,255,0.2);
+      border: 3px solid #fff;
+      border-radius: 999px;
+      padding: 10px 20px;
+      cursor: pointer;
+    }
+    .mode-btn.active { background: rgba(255,255,255,0.55); color: #1a2a5a; }
+    .mode-btn:active, .ctrl-btn:active { transform: translateY(2px); }
+
+    .palette {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .tile-btn {
+      font-family: inherit;
+      font-size: 0.9rem;
+      font-weight: bold;
+      color: #fff;
+      background: rgba(255,255,255,0.18);
+      border: 3px solid #fff;
+      border-radius: 14px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+    .tile-btn.active { background: rgba(255,255,255,0.55); color: #1a2a5a; }
+
+    /* ---- Level viewport ---- */
+    .level-wrap {
+      max-width: 720px;
+      margin: 0 auto 14px;
+      overflow-x: auto;
+      border: 5px solid #fff;
+      border-radius: 18px;
+      box-shadow: 0 8px 0 rgba(0,0,0,0.2);
+      -webkit-overflow-scrolling: touch;
+    }
+    .level {
+      position: relative;
+      background: linear-gradient(180deg, #7ec8ff, #bfe6ff);
+    }
+    .cell {
+      position: absolute;
+      border: 1px solid rgba(255,255,255,0.15);
+      padding: 0;
+      cursor: pointer;
+      background: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      line-height: 1;
+    }
+    .cell.tile-ground { background: linear-gradient(180deg, #8bc34a, #6d4c26); border-color: rgba(0,0,0,0.25); }
+    .cell.tile-brick {
+      background: repeating-linear-gradient(0deg, #d9702e, #d9702e 14px, #b85a20 14px, #b85a20 16px);
+      border-color: rgba(0,0,0,0.25);
+    }
+    .cell.tile-coin, .cell.tile-enemy, .cell.tile-start, .cell.tile-goal { border-color: transparent; }
+
+    .entity {
+      position: absolute;
+      font-size: 22px;
+      line-height: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      pointer-events: none;
+    }
+    .player-el { font-size: 24px; z-index: 5; }
+
+    /* ---- Play HUD ---- */
+    .play-hud {
+      display: none;
+      justify-content: center;
+      gap: 20px;
+      font-size: 1.1rem;
+      font-weight: bold;
+      margin-bottom: 10px;
+      text-shadow: 1px 1px 0 rgba(0,0,0,0.3);
+    }
+
+    .touch-controls {
+      display: none;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 10px;
+    }
+    .touch-btn {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.25);
+      border: 3px solid #fff;
+      font-size: 1.6rem;
+      color: #fff;
+      cursor: pointer;
+    }
+    .touch-btn:active { background: rgba(255,255,255,0.5); }
+
+    .hint { font-size: 0.85rem; opacity: 0.85; margin-top: 6px; }
+
+    /* ---- Overlays ---- */
+    .overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+      padding: 20px;
+    }
+    .overlay.show { display: flex; }
+    .overlay-card {
+      background: rgba(90,60,150,0.92);
+      border: 4px solid #fff;
+      border-radius: 26px;
+      padding: 30px 26px;
+      max-width: 320px;
+      text-align: center;
+      box-shadow: 0 8px 0 rgba(0,0,0,0.25);
+    }
+    .overlay-card h2 { font-size: 1.6rem; margin: 10px 0; text-shadow: 2px 2px 0 rgba(0,0,0,0.3); }
+    .overlay-card p { margin-bottom: 16px; }
+    .big-btn {
+      font-family: inherit;
+      font-size: 1.1rem;
+      font-weight: bold;
+      color: #fff;
+      background: rgba(74,222,128,0.5);
+      border: 4px solid #fff;
+      border-radius: 999px;
+      padding: 12px 26px;
+      cursor: pointer;
+    }
+    .big-btn:active { transform: translateY(3px); }
+  </style>
+</head>
+<body>
+  <h1>🧱 Ben's Level Builder 🧱</h1>
+  <p class="sub">Build your own level, then press Play to run through it!</p>
+
+  <div class="mode-row">
+    <button class="mode-btn active" id="buildModeBtn">🧱 Build</button>
+    <button class="mode-btn" id="playModeBtn">▶️ Play</button>
+  </div>
+
+  <div class="palette" id="palette">
+    <button class="tile-btn active" data-tile="ground">🟫 Ground</button>
+    <button class="tile-btn" data-tile="brick">🧱 Brick</button>
+    <button class="tile-btn" data-tile="coin">🪙 Coin</button>
+    <button class="tile-btn" data-tile="enemy">🐛 Enemy</button>
+    <button class="tile-btn" data-tile="start">🟢 Start</button>
+    <button class="tile-btn" data-tile="goal">🏁 Goal</button>
+    <button class="tile-btn" data-tile="eraser">🧹 Eraser</button>
+  </div>
+
+  <div class="play-hud" id="playHud">
+    <div>🪙 <span id="scoreText">0</span></div>
+    <div id="livesText">❤️ × 3</div>
+  </div>
+
+  <div class="level-wrap" id="levelWrap">
+    <div class="level" id="level"></div>
+  </div>
+
+  <div class="touch-controls" id="touchControls">
+    <button class="touch-btn" id="leftBtn">◀️</button>
+    <button class="touch-btn" id="jumpBtn">⬆️</button>
+    <button class="touch-btn" id="rightBtn">▶️</button>
+  </div>
+  <p class="hint" id="buildHint">Pick a tile above, then tap the level to place it!</p>
+
+  <div class="ctrl-row">
+    <button class="ctrl-btn" id="saveLevelBtn">💾 Save Level</button>
+    <button class="ctrl-btn" id="clearLevelBtn">🔄 Clear Level</button>
+  </div>
+
+  <div class="overlay" id="winOverlay">
+    <div class="overlay-card">
+      <div style="font-size:3rem;">🎉</div>
+      <h2>Level Complete!</h2>
+      <p id="winStats"></p>
+      <button class="big-btn" id="winBackBtn">🧱 Back to Building</button>
+    </div>
+  </div>
+
+  <div class="overlay" id="loseOverlay">
+    <div class="overlay-card">
+      <div style="font-size:3rem;">💥</div>
+      <h2>Out of Lives!</h2>
+      <p>Wanna try again?</p>
+      <button class="big-btn" id="retryBtn">🔄 Try Again</button>
+    </div>
+  </div>
+
+  <script>
+    var COLS = 40, ROWS = 9, CELL = 32;
+    var LEVEL_W = COLS * CELL, LEVEL_H = ROWS * CELL;
+    var STORAGE_KEY = "bensLevelBuilderLevel";
+
+    // levelData[row][col] = null | "ground" | "brick" | "coin" | "enemy" | "start" | "goal"
+    function makeDefaultLevel() {
+      var data = [];
+      for (var r = 0; r < ROWS; r++) data.push(new Array(COLS).fill(null));
+      for (var c = 0; c < COLS; c++) data[ROWS - 1][c] = "ground";
+      data[ROWS - 2][2] = "start";
+      data[ROWS - 2][COLS - 2] = "goal";
+      data[ROWS - 2][10] = "coin";
+      data[ROWS - 2][11] = "coin";
+      data[ROWS - 2][12] = "coin";
+      data[ROWS - 2][20] = "enemy";
+      return data;
+    }
+
+    var levelData = makeDefaultLevel();
+
+    var levelEl = document.getElementById("level");
+    var levelWrap = document.getElementById("levelWrap");
+    levelEl.style.width = LEVEL_W + "px";
+    levelEl.style.height = LEVEL_H + "px";
+
+    var TILE_EMOJI = { coin: "🪙", enemy: "🐛", start: "🟢", goal: "🏁" };
+
+    var cellButtons = []; // cellButtons[row][col]
+
+    for (var row = 0; row < ROWS; row++) {
+      var rowButtons = [];
+      for (var col = 0; col < COLS; col++) {
+        var cell = document.createElement("button");
+        cell.className = "cell";
+        cell.style.left = (col * CELL) + "px";
+        cell.style.top = (row * CELL) + "px";
+        cell.style.width = CELL + "px";
+        cell.style.height = CELL + "px";
+        (function (row, col, cell) {
+          cell.addEventListener("click", function () { placeTile(row, col); });
+        })(row, col, cell);
+        levelEl.appendChild(cell);
+        rowButtons.push(cell);
+      }
+      cellButtons.push(rowButtons);
+    }
+
+    function renderCell(row, col) {
+      var tile = levelData[row][col];
+      var btn = cellButtons[row][col];
+      btn.className = "cell" + (tile === "ground" ? " tile-ground" : tile === "brick" ? " tile-brick" : "");
+      btn.textContent = (tile && TILE_EMOJI[tile]) ? TILE_EMOJI[tile] : "";
+    }
+
+    function renderAllCells() {
+      for (var r = 0; r < ROWS; r++) {
+        for (var c = 0; c < COLS; c++) renderCell(r, c);
+      }
+    }
+
+    var currentTool = "ground";
+    document.querySelectorAll(".tile-btn").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        document.querySelectorAll(".tile-btn").forEach(function (b) { b.classList.remove("active"); });
+        btn.classList.add("active");
+        currentTool = btn.getAttribute("data-tile");
+      });
+    });
+
+    function clearTileTypeFromLevel(type) {
+      for (var r = 0; r < ROWS; r++) {
+        for (var c = 0; c < COLS; c++) {
+          if (levelData[r][c] === type) { levelData[r][c] = null; renderCell(r, c); }
+        }
+      }
+    }
+
+    function placeTile(row, col) {
+      if (buildMode !== true) return;
+      if (currentTool === "eraser") {
+        levelData[row][col] = null;
+      } else {
+        if (currentTool === "start" || currentTool === "goal") clearTileTypeFromLevel(currentTool);
+        levelData[row][col] = currentTool;
+      }
+      renderCell(row, col);
+    }
+
+    renderAllCells();
+
+    /* ===================== SAVE / LOAD ===================== */
+    function saveLevel() {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(levelData)); } catch (e) {}
+    }
+
+    function loadLevel() {
+      var raw;
+      try { raw = localStorage.getItem(STORAGE_KEY); } catch (e) { return; }
+      if (!raw) return;
+      try {
+        var data = JSON.parse(raw);
+        if (Array.isArray(data) && data.length === ROWS) {
+          levelData = data;
+          renderAllCells();
+        }
+      } catch (e) {}
+    }
+
+    document.getElementById("saveLevelBtn").addEventListener("click", saveLevel);
+    document.getElementById("clearLevelBtn").addEventListener("click", function () {
+      levelData = makeDefaultLevel();
+      renderAllCells();
+    });
+
+    loadLevel();
+
+    /* ===================== MODE SWITCHING ===================== */
+    var buildMode = true;
+    var buildModeBtn = document.getElementById("buildModeBtn");
+    var playModeBtn = document.getElementById("playModeBtn");
+    var palette = document.getElementById("palette");
+    var buildHint = document.getElementById("buildHint");
+    var playHud = document.getElementById("playHud");
+    var touchControls = document.getElementById("touchControls");
+
+    function enterBuildMode() {
+      buildMode = true;
+      running = false;
+      buildModeBtn.classList.add("active");
+      playModeBtn.classList.remove("active");
+      palette.style.display = "flex";
+      buildHint.style.display = "block";
+      playHud.style.display = "none";
+      touchControls.style.display = "none";
+      clearEntityEls();
+      levelWrap.scrollLeft = 0;
+      document.getElementById("winOverlay").classList.remove("show");
+      document.getElementById("loseOverlay").classList.remove("show");
+    }
+
+    function enterPlayMode() {
+      buildMode = false;
+      buildModeBtn.classList.remove("active");
+      playModeBtn.classList.add("active");
+      palette.style.display = "none";
+      buildHint.style.display = "none";
+      playHud.style.display = "flex";
+      touchControls.style.display = "flex";
+      startPlay();
+    }
+
+    buildModeBtn.addEventListener("click", enterBuildMode);
+    playModeBtn.addEventListener("click", enterPlayMode);
+    document.getElementById("winBackBtn").addEventListener("click", enterBuildMode);
+    document.getElementById("retryBtn").addEventListener("click", function () {
+      document.getElementById("loseOverlay").classList.remove("show");
+      startPlay();
+    });
+
+    /* ===================== PLAY MODE ===================== */
+    var PW = 22, PH = 26;
+    var GRAVITY = 0.55;
+    var JUMP_VELOCITY = -10.5;
+    var MOVE_SPEED = 3;
+
+    var player = { x: 0, y: 0, vy: 0, grounded: false };
+    var score = 0;
+    var lives = 3;
+    var running = false;
+    var invulnerable = false;
+    var startCol = 1, startRow = ROWS - 2;
+    var playerEl = null;
+    var entityEls = [];
+
+    var keys = { left: false, right: false, jump: false };
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") keys.left = true;
+      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") keys.right = true;
+      if (e.key === "ArrowUp" || e.key === " " || e.key === "w" || e.key === "W") keys.jump = true;
+    });
+    document.addEventListener("keyup", function (e) {
+      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") keys.left = false;
+      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") keys.right = false;
+      if (e.key === "ArrowUp" || e.key === " " || e.key === "w" || e.key === "W") keys.jump = false;
+    });
+
+    function bindTouchBtn(id, keyName) {
+      var el = document.getElementById(id);
+      el.addEventListener("mousedown", function () { keys[keyName] = true; });
+      el.addEventListener("mouseup", function () { keys[keyName] = false; });
+      el.addEventListener("mouseleave", function () { keys[keyName] = false; });
+      el.addEventListener("touchstart", function (e) { e.preventDefault(); keys[keyName] = true; }, { passive: false });
+      el.addEventListener("touchend", function (e) { e.preventDefault(); keys[keyName] = false; }, { passive: false });
+    }
+    bindTouchBtn("leftBtn", "left");
+    bindTouchBtn("rightBtn", "right");
+    bindTouchBtn("jumpBtn", "jump");
+
+    function clearEntityEls() {
+      if (playerEl) { playerEl.remove(); playerEl = null; }
+      entityEls.forEach(function (el) { el.remove(); });
+      entityEls = [];
+    }
+
+    function findFirstTile(type) {
+      for (var r = 0; r < ROWS; r++) {
+        for (var c = 0; c < COLS; c++) {
+          if (levelData[r][c] === type) return { row: r, col: c };
+        }
+      }
+      return null;
+    }
+
+    function isSolidAt(col, row) {
+      if (col < 0 || col >= COLS) return true;
+      if (row < 0 || row >= ROWS) return false;
+      var t = levelData[row][col];
+      return t === "ground" || t === "brick";
+    }
+
+    function collidesSolid(x, y, w, h) {
+      var colStart = Math.floor(x / CELL);
+      var colEnd = Math.floor((x + w - 1) / CELL);
+      var rowStart = Math.floor(y / CELL);
+      var rowEnd = Math.floor((y + h - 1) / CELL);
+      for (var r = rowStart; r <= rowEnd; r++) {
+        for (var c = colStart; c <= colEnd; c++) {
+          if (isSolidAt(c, r)) return true;
+        }
+      }
+      return false;
+    }
+
+    function rectsOverlap(x1, y1, w1, h1, x2, y2, w2, h2) {
+      return x1 < x2 + w2 && x1 + w1 > x2 && y1 < y2 + h2 && y1 + h1 > y2;
+    }
+
+    var rafId = null;
+
+    function startPlay() {
+      if (rafId) cancelAnimationFrame(rafId);
+      clearEntityEls();
+      var startTile = findFirstTile("start");
+      startCol = startTile ? startTile.col : 1;
+      startRow = startTile ? startTile.row : ROWS - 2;
+
+      player.x = startCol * CELL + (CELL - PW) / 2;
+      player.y = startRow * CELL + (CELL - PH);
+      player.vy = 0;
+      player.grounded = false;
+      score = 0;
+      lives = 3;
+      invulnerable = false;
+      updateHud();
+
+      playerEl = document.createElement("div");
+      playerEl.className = "entity player-el";
+      playerEl.textContent = "🐸";
+      levelEl.appendChild(playerEl);
+
+      running = true;
+      rafId = requestAnimationFrame(gameLoop);
+    }
+
+    function updateHud() {
+      document.getElementById("scoreText").textContent = score;
+      document.getElementById("livesText").textContent = "❤️ × " + Math.max(lives, 0);
+    }
+
+    function respawnPlayer() {
+      player.x = startCol * CELL + (CELL - PW) / 2;
+      player.y = startRow * CELL + (CELL - PH);
+      player.vy = 0;
+      invulnerable = true;
+      setTimeout(function () { invulnerable = false; }, 1000);
+    }
+
+    function loseLife() {
+      if (invulnerable) return;
+      lives--;
+      updateHud();
+      if (lives <= 0) {
+        running = false;
+        document.getElementById("loseOverlay").classList.add("show");
+      } else {
+        respawnPlayer();
+      }
+    }
+
+    function checkEntityCollisions(prevBottom, fallingThisFrame) {
+      for (var r = 0; r < ROWS; r++) {
+        for (var c = 0; c < COLS; c++) {
+          var tile = levelData[r][c];
+          if (!tile) continue;
+          var tx = c * CELL, ty = r * CELL;
+
+          if (tile === "coin") {
+            if (rectsOverlap(player.x, player.y, PW, PH, tx + 4, ty + 4, CELL - 8, CELL - 8)) {
+              levelData[r][c] = null;
+              renderCell(r, c);
+              score++;
+              updateHud();
+            }
+          } else if (tile === "enemy") {
+            if (rectsOverlap(player.x, player.y, PW, PH, tx + 2, ty + 2, CELL - 4, CELL - 4)) {
+              if (fallingThisFrame && prevBottom <= ty + 6) {
+                levelData[r][c] = null;
+                renderCell(r, c);
+                player.vy = JUMP_VELOCITY * 0.6;
+                score += 2;
+                updateHud();
+              } else if (!invulnerable) {
+                loseLife();
+              }
+            }
+          } else if (tile === "goal") {
+            if (rectsOverlap(player.x, player.y, PW, PH, tx, ty, CELL, CELL)) {
+              running = false;
+              document.getElementById("winStats").textContent = "🪙 " + score + " coins collected!";
+              document.getElementById("winOverlay").classList.add("show");
+            }
+          }
+        }
+      }
+    }
+
+    function gameLoop() {
+      if (!running) return;
+
+      var prevBottom = player.y + PH;
+
+      var vx = 0;
+      if (keys.left) vx -= MOVE_SPEED;
+      if (keys.right) vx += MOVE_SPEED;
+
+      player.x += vx;
+      if (collidesSolid(player.x, player.y, PW, PH)) {
+        if (vx > 0) player.x = Math.floor((player.x + PW) / CELL) * CELL - PW;
+        else if (vx < 0) player.x = Math.ceil(player.x / CELL) * CELL;
+      }
+      player.x = Math.max(0, Math.min(LEVEL_W - PW, player.x));
+
+      player.vy += GRAVITY;
+      var fallingThisFrame = player.vy > 0;
+      player.y += player.vy;
+      player.grounded = false;
+      if (collidesSolid(player.x, player.y, PW, PH)) {
+        if (player.vy > 0) {
+          player.y = Math.floor((player.y + PH) / CELL) * CELL - PH;
+          player.vy = 0;
+          player.grounded = true;
+        } else if (player.vy < 0) {
+          player.y = Math.ceil(player.y / CELL) * CELL;
+          player.vy = 0;
+        }
+      }
+
+      if (keys.jump && player.grounded) {
+        player.vy = JUMP_VELOCITY;
+        player.grounded = false;
+      }
+
+      if (player.y > LEVEL_H) {
+        loseLife();
+      }
+
+      checkEntityCollisions(prevBottom, fallingThisFrame);
+
+      if (playerEl) {
+        playerEl.style.left = player.x + "px";
+        playerEl.style.top = player.y + "px";
+        playerEl.style.opacity = invulnerable ? (Math.floor(Date.now() / 100) % 2 ? "0.3" : "1") : "1";
+      }
+
+      var viewportWidth = levelWrap.clientWidth;
+      var targetScroll = player.x - viewportWidth / 2;
+      levelWrap.scrollLeft = Math.max(0, Math.min(LEVEL_W - viewportWidth, targetScroll));
+
+      rafId = requestAnimationFrame(gameLoop);
+    }
+  </script>
+</body>
+</html>
