@@ -485,7 +485,7 @@
               x: c * CELL + 4, y: r * CELL + 4,
               vx: (Math.random() < 0.5 ? -1 : 1) * ENEMY_SPEED,
               vy: 0, w: CELL - 8, h: CELL - 8,
-              el: el, alive: true
+              el: el, alive: true, grounded: false
             });
           }
         }
@@ -496,6 +496,14 @@
       activeEnemies.forEach(function (e) {
         if (!e.alive) return;
 
+        // turn around before walking off the edge of a platform (only checked while on solid ground)
+        if (e.grounded) {
+          var aheadX = e.vx > 0 ? e.x + e.w + 1 : e.x - 1;
+          var aheadCol = Math.floor(aheadX / CELL);
+          var footRow = Math.floor((e.y + e.h) / CELL);
+          if (!isSolidAt(aheadCol, footRow)) e.vx *= -1;
+        }
+
         e.x += e.vx;
         if (collidesSolid(e.x, e.y, e.w, e.h)) {
           e.x -= e.vx;
@@ -504,10 +512,12 @@
 
         e.vy += GRAVITY;
         e.y += e.vy;
+        e.grounded = false;
         if (collidesSolid(e.x, e.y, e.w, e.h)) {
           if (e.vy > 0) {
             e.y = Math.floor((e.y + e.h) / CELL) * CELL - e.h;
             e.vy = 0;
+            e.grounded = true;
           } else if (e.vy < 0) {
             e.y = Math.ceil(e.y / CELL) * CELL;
             e.vy = 0;
