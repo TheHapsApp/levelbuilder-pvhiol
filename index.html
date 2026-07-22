@@ -228,10 +228,11 @@
     <button class="touch-btn" id="stopGoBtn">⏸️</button>
     <button class="touch-btn" id="jumpBtn">⬆️</button>
   </div>
-  <p class="hint" id="buildHint">Pick a tile above, then tap the level to place it! 🚩 Checkpoints save your spot.</p>
+  <p class="hint" id="buildHint">Pick a tile above, then tap the level to place it! 🚩 Checkpoints save your spot. Tap ➕ Add More Space to make your level longer!</p>
   <p class="hint" id="playHint" style="display:none;">🐸 runs by itself — press <b>Space</b> to jump, and <b>S</b> to stop or go!</p>
 
   <div class="ctrl-row">
+    <button class="ctrl-btn" id="addSpaceBtn">➕ Add More Space</button>
     <button class="ctrl-btn" id="saveLevelBtn">💾 Save Level</button>
     <button class="ctrl-btn" id="clearLevelBtn">🔄 Clear Level</button>
   </div>
@@ -285,22 +286,51 @@
 
     var cellButtons = []; // cellButtons[row][col]
 
+    function createCellButton(row, col) {
+      var cell = document.createElement("button");
+      cell.className = "cell";
+      cell.style.left = (col * CELL) + "px";
+      cell.style.top = (row * CELL) + "px";
+      cell.style.width = CELL + "px";
+      cell.style.height = CELL + "px";
+      cell.addEventListener("click", function () { placeTile(row, col); });
+      levelEl.appendChild(cell);
+      return cell;
+    }
+
     for (var row = 0; row < ROWS; row++) {
       var rowButtons = [];
       for (var col = 0; col < COLS; col++) {
-        var cell = document.createElement("button");
-        cell.className = "cell";
-        cell.style.left = (col * CELL) + "px";
-        cell.style.top = (row * CELL) + "px";
-        cell.style.width = CELL + "px";
-        cell.style.height = CELL + "px";
-        (function (row, col, cell) {
-          cell.addEventListener("click", function () { placeTile(row, col); });
-        })(row, col, cell);
-        levelEl.appendChild(cell);
-        rowButtons.push(cell);
+        rowButtons.push(createCellButton(row, col));
       }
       cellButtons.push(rowButtons);
+    }
+
+    // Grows (or shrinks, e.g. when loading a saved level) the grid to a new column count.
+    function setGridWidth(newCols) {
+      if (newCols > COLS) {
+        for (var r = 0; r < ROWS; r++) {
+          for (var c = COLS; c < newCols; c++) {
+            if (levelData[r].length <= c) levelData[r][c] = null;
+            cellButtons[r].push(createCellButton(r, c));
+          }
+        }
+      } else if (newCols < COLS) {
+        for (var r = 0; r < ROWS; r++) {
+          cellButtons[r].splice(newCols).forEach(function (btn) { btn.remove(); });
+          levelData[r].length = newCols;
+        }
+      }
+      COLS = newCols;
+      LEVEL_W = COLS * CELL;
+      levelEl.style.width = LEVEL_W + "px";
+    }
+
+    function addColumns(n) {
+      var oldCols = COLS;
+      setGridWidth(COLS + n);
+      renderAllCells();
+      levelWrap.scrollLeft = Math.max(0, oldCols * CELL - CELL * 3);
     }
 
     function renderCell(row, col) {
@@ -359,6 +389,8 @@
         var data = JSON.parse(raw);
         if (Array.isArray(data) && data.length === ROWS) {
           levelData = data;
+          var savedCols = data[0] ? data[0].length : COLS;
+          if (savedCols !== COLS) setGridWidth(savedCols);
           renderAllCells();
         }
       } catch (e) {}
@@ -368,6 +400,9 @@
     document.getElementById("clearLevelBtn").addEventListener("click", function () {
       levelData = makeDefaultLevel();
       renderAllCells();
+    });
+    document.getElementById("addSpaceBtn").addEventListener("click", function () {
+      addColumns(10);
     });
 
     loadLevel();
