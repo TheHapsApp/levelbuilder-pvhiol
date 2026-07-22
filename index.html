@@ -114,6 +114,15 @@
       background: repeating-linear-gradient(0deg, #d9702e, #d9702e 14px, #b85a20 14px, #b85a20 16px);
       border-color: rgba(0,0,0,0.25);
     }
+    .cell.tile-cloud {
+      background:
+        radial-gradient(circle at 25% 60%, #ffffff 40%, transparent 41%),
+        radial-gradient(circle at 50% 30%, #ffffff 44%, transparent 45%),
+        radial-gradient(circle at 76% 60%, #ffffff 40%, transparent 41%),
+        radial-gradient(circle at 50% 68%, #ffffff 48%, transparent 49%),
+        #cdeeff;
+      border-color: rgba(255,255,255,0.7);
+    }
     .cell.tile-coin, .cell.tile-enemy, .cell.tile-start, .cell.tile-goal, .cell.tile-checkpoint { border-color: transparent; }
 
     .entity {
@@ -207,6 +216,7 @@
   <div class="palette" id="palette">
     <button class="tile-btn active" data-tile="ground">🟫 Ground</button>
     <button class="tile-btn" data-tile="brick">🧱 Brick</button>
+    <button class="tile-btn" data-tile="cloud">☁️ Cloud</button>
     <button class="tile-btn" data-tile="coin">🪙 Coin</button>
     <button class="tile-btn" data-tile="enemy">🐛 Enemy</button>
     <button class="tile-btn" data-tile="start">🟢 Start</button>
@@ -336,7 +346,7 @@
     function renderCell(row, col) {
       var tile = levelData[row][col];
       var btn = cellButtons[row][col];
-      btn.className = "cell" + (tile === "ground" ? " tile-ground" : tile === "brick" ? " tile-brick" : "");
+      btn.className = "cell" + (tile === "ground" ? " tile-ground" : tile === "brick" ? " tile-brick" : tile === "cloud" ? " tile-cloud" : "");
       btn.textContent = (tile && TILE_EMOJI[tile]) ? TILE_EMOJI[tile] : "";
     }
 
@@ -594,7 +604,7 @@
       if (col < 0 || col >= COLS) return true;
       if (row < 0 || row >= ROWS) return false;
       var t = levelData[row][col];
-      return t === "ground" || t === "brick";
+      return t === "ground" || t === "brick" || t === "cloud";
     }
 
     function collidesSolid(x, y, w, h) {
