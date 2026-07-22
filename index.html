@@ -222,6 +222,7 @@
     <button class="tile-btn" data-tile="start">🟢 Start</button>
     <button class="tile-btn" data-tile="goal">🏁 Goal</button>
     <button class="tile-btn" data-tile="checkpoint">🚩 Checkpoint</button>
+    <button class="tile-btn" data-tile="heart">❤️ Heart</button>
     <button class="tile-btn" data-tile="eraser">🧹 Eraser</button>
   </div>
 
@@ -286,6 +287,7 @@
       data[ROWS - 2][12] = "coin";
       data[ROWS - 2][20] = "enemy";
       data[ROWS - 2][30] = "checkpoint";
+      data[ROWS - 2][35] = "heart";
       return data;
     }
 
@@ -296,7 +298,7 @@
     levelEl.style.width = LEVEL_W + "px";
     levelEl.style.height = LEVEL_H + "px";
 
-    var TILE_EMOJI = { coin: "🪙", enemy: "🐛", start: "🟢", goal: "🏁", checkpoint: "🚩" };
+    var TILE_EMOJI = { coin: "🪙", enemy: "🐛", start: "🟢", goal: "🏁", checkpoint: "🚩", heart: "❤️" };
 
     var cellButtons = []; // cellButtons[row][col]
 
@@ -737,6 +739,13 @@
             if (rectsOverlap(player.x, player.y, PW, PH, tx, ty, CELL, CELL)) {
               startCol = c;
               startRow = r;
+            }
+          } else if (tile === "heart") {
+            if (rectsOverlap(player.x, player.y, PW, PH, tx + 4, ty + 4, CELL - 8, CELL - 8)) {
+              levelData[r][c] = null;
+              renderCell(r, c);
+              lives++;
+              updateHud();
             }
           }
         }
