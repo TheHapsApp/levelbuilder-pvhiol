@@ -202,6 +202,11 @@
       cursor: pointer;
     }
     .big-btn:active { transform: translateY(3px); }
+
+    .levels-list { max-height: 260px; overflow-y: auto; margin-bottom: 16px; text-align: left; }
+    .level-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+    .level-row-name { flex: 1; font-weight: bold; overflow-wrap: anywhere; }
+    .level-row .tile-btn { padding: 8px 10px; }
   </style>
 </head>
 <body>
@@ -243,12 +248,24 @@
   <p class="hint" id="playHint" style="display:none;">🐸 runs by itself — press <b>Space</b> to jump, and <b>S</b> to stop or go!</p>
 
   <div class="ctrl-row">
+    <button class="ctrl-btn" id="createNewBtn">🆕 Create New Level</button>
+    <button class="ctrl-btn" id="myLevelsBtn">🗂️ My Levels</button>
+    <button class="ctrl-btn" id="doneBtn">✅ Done</button>
+    <button class="ctrl-btn" id="saveLevelBtn">💾 Save Level</button>
+    <button class="ctrl-btn" id="clearLevelBtn">🔄 Clear Level</button>
     <button class="ctrl-btn" id="addSpaceBtn">➕ Add More Space</button>
     <button class="ctrl-btn" id="removeSpaceBtn">➖ Remove Space</button>
     <button class="ctrl-btn" id="addHeightBtn">⬆️ Add More Height</button>
     <button class="ctrl-btn" id="removeHeightBtn">⬇️ Remove Height</button>
-    <button class="ctrl-btn" id="saveLevelBtn">💾 Save Level</button>
-    <button class="ctrl-btn" id="clearLevelBtn">🔄 Clear Level</button>
+  </div>
+
+  <div class="overlay" id="levelsOverlay">
+    <div class="overlay-card">
+      <div style="font-size:3rem;">🗂️</div>
+      <h2>My Levels</h2>
+      <div class="levels-list" id="levelsList"></div>
+      <button class="big-btn" id="levelsCloseBtn">✖️ Close</button>
+    </div>
   </div>
 
   <div class="overlay" id="winOverlay">
@@ -274,6 +291,9 @@
     var MIN_COLS = 10, MIN_ROWS = 5;
     var LEVEL_W = COLS * CELL, LEVEL_H = ROWS * CELL;
     var STORAGE_KEY = "bensLevelBuilderLevel";
+    var LEVELS_KEY = "bensLevelBuilderLevels";
+    var levels = [];
+    var currentLevelName = null;
 
     // levelData[row][col] = null | "ground" | "brick" | "coin" | "enemy" | "start" | "goal"
     function makeDefaultLevel() {
@@ -451,6 +471,109 @@
       removeRows(5);
     });
 
+    /* ===================== NAMED LEVELS (My Levels) ===================== */
+    function loadLevelsList() {
+      try {
+        var raw = localStorage.getItem(LEVELS_KEY);
+        levels = raw ? JSON.parse(raw) : [];
+      } catch (e) { levels = []; }
+      if (!Array.isArray(levels)) levels = [];
+    }
+
+    function saveLevelsList() {
+      try { localStorage.setItem(LEVELS_KEY, JSON.stringify(levels)); } catch (e) {}
+    }
+
+    function openSavedLevel(index) {
+      var lvl = levels[index];
+      if (!lvl) return;
+      levelData = JSON.parse(JSON.stringify(lvl.data));
+      ROWS = levelData.length;
+      COLS = levelData[0] ? levelData[0].length : COLS;
+      LEVEL_W = COLS * CELL;
+      LEVEL_H = ROWS * CELL;
+      currentLevelName = lvl.name;
+      rebuildGrid();
+      document.getElementById("levelsOverlay").classList.remove("show");
+      enterBuildMode();
+    }
+
+    function renderLevelsList() {
+      var container = document.getElementById("levelsList");
+      container.innerHTML = "";
+      if (levels.length === 0) {
+        var p = document.createElement("p");
+        p.textContent = "No saved levels yet — build one and press ✅ Done!";
+        container.appendChild(p);
+        return;
+      }
+      levels.forEach(function (lvl, i) {
+        var row = document.createElement("div");
+        row.className = "level-row";
+
+        var nameSpan = document.createElement("span");
+        nameSpan.className = "level-row-name";
+        nameSpan.textContent = lvl.name;
+
+        var openBtn = document.createElement("button");
+        openBtn.className = "tile-btn";
+        openBtn.textContent = "📂 Open";
+        openBtn.addEventListener("click", function () { openSavedLevel(i); });
+
+        var deleteBtn = document.createElement("button");
+        deleteBtn.className = "tile-btn";
+        deleteBtn.textContent = "🗑️";
+        deleteBtn.addEventListener("click", function () {
+          if (confirm("Delete \"" + lvl.name + "\"?")) {
+            levels.splice(i, 1);
+            saveLevelsList();
+            renderLevelsList();
+          }
+        });
+
+        row.appendChild(nameSpan);
+        row.appendChild(openBtn);
+        row.appendChild(deleteBtn);
+        container.appendChild(row);
+      });
+    }
+
+    document.getElementById("createNewBtn").addEventListener("click", function () {
+      COLS = 40;
+      ROWS = 9;
+      LEVEL_W = COLS * CELL;
+      LEVEL_H = ROWS * CELL;
+      levelData = makeDefaultLevel();
+      currentLevelName = null;
+      rebuildGrid();
+      enterBuildMode();
+    });
+
+    document.getElementById("myLevelsBtn").addEventListener("click", function () {
+      renderLevelsList();
+      document.getElementById("levelsOverlay").classList.add("show");
+    });
+
+    document.getElementById("levelsCloseBtn").addEventListener("click", function () {
+      document.getElementById("levelsOverlay").classList.remove("show");
+    });
+
+    document.getElementById("doneBtn").addEventListener("click", function () {
+      var name = window.prompt("What do you want to name your level?", currentLevelName || "");
+      if (name === null) return;
+      name = name.trim();
+      if (!name) return;
+      var existingIndex = levels.findIndex(function (lvl) { return lvl.name === name; });
+      var entry = { name: name, data: levelData };
+      if (existingIndex >= 0) levels[existingIndex] = entry;
+      else levels.push(entry);
+      currentLevelName = name;
+      saveLevelsList();
+      saveLevel();
+      alert("Saved \"" + name + "\"! 🎉");
+    });
+
+    loadLevelsList();
     loadLevel();
 
     /* ===================== MODE SWITCHING ===================== */
