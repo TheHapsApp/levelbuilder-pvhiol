@@ -243,6 +243,7 @@
 
   <div class="ctrl-row">
     <button class="ctrl-btn" id="addSpaceBtn">➕ Add More Space</button>
+    <button class="ctrl-btn" id="addHeightBtn">⬆️ Add More Height</button>
     <button class="ctrl-btn" id="saveLevelBtn">💾 Save Level</button>
     <button class="ctrl-btn" id="clearLevelBtn">🔄 Clear Level</button>
   </div>
@@ -308,39 +309,41 @@
       return cell;
     }
 
-    for (var row = 0; row < ROWS; row++) {
-      var rowButtons = [];
-      for (var col = 0; col < COLS; col++) {
-        rowButtons.push(createCellButton(row, col));
+    // Tears down and recreates every cell button to match the current ROWS/COLS —
+    // used whenever the level's size changes (grow the level, or load a saved one).
+    function rebuildGrid() {
+      cellButtons.forEach(function (rowButtons) {
+        rowButtons.forEach(function (btn) { btn.remove(); });
+      });
+      cellButtons = [];
+      for (var r = 0; r < ROWS; r++) {
+        var rowButtons = [];
+        for (var c = 0; c < COLS; c++) rowButtons.push(createCellButton(r, c));
+        cellButtons.push(rowButtons);
       }
-      cellButtons.push(rowButtons);
+      levelEl.style.width = LEVEL_W + "px";
+      levelEl.style.height = LEVEL_H + "px";
+      renderAllCells();
     }
 
-    // Grows (or shrinks, e.g. when loading a saved level) the grid to a new column count.
-    function setGridWidth(newCols) {
-      if (newCols > COLS) {
-        for (var r = 0; r < ROWS; r++) {
-          for (var c = COLS; c < newCols; c++) {
-            if (levelData[r].length <= c) levelData[r][c] = null;
-            cellButtons[r].push(createCellButton(r, c));
-          }
-        }
-      } else if (newCols < COLS) {
-        for (var r = 0; r < ROWS; r++) {
-          cellButtons[r].splice(newCols).forEach(function (btn) { btn.remove(); });
-          levelData[r].length = newCols;
-        }
-      }
-      COLS = newCols;
-      LEVEL_W = COLS * CELL;
-      levelEl.style.width = LEVEL_W + "px";
-    }
+    rebuildGrid();
 
     function addColumns(n) {
       var oldCols = COLS;
-      setGridWidth(COLS + n);
-      renderAllCells();
+      for (var r = 0; r < ROWS; r++) {
+        for (var c = COLS; c < COLS + n; c++) levelData[r][c] = null;
+      }
+      COLS += n;
+      LEVEL_W = COLS * CELL;
+      rebuildGrid();
       levelWrap.scrollLeft = Math.max(0, oldCols * CELL - CELL * 3);
+    }
+
+    function addRows(n) {
+      for (var i = 0; i < n; i++) levelData.unshift(new Array(COLS).fill(null));
+      ROWS += n;
+      LEVEL_H = ROWS * CELL;
+      rebuildGrid();
     }
 
     function renderCell(row, col) {
@@ -384,8 +387,6 @@
       renderCell(row, col);
     }
 
-    renderAllCells();
-
     /* ===================== SAVE / LOAD ===================== */
     function saveLevel() {
       try { localStorage.setItem(STORAGE_KEY, JSON.stringify(levelData)); } catch (e) {}
@@ -397,11 +398,13 @@
       if (!raw) return;
       try {
         var data = JSON.parse(raw);
-        if (Array.isArray(data) && data.length === ROWS) {
+        if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0])) {
           levelData = data;
-          var savedCols = data[0] ? data[0].length : COLS;
-          if (savedCols !== COLS) setGridWidth(savedCols);
-          renderAllCells();
+          ROWS = data.length;
+          COLS = data[0].length;
+          LEVEL_W = COLS * CELL;
+          LEVEL_H = ROWS * CELL;
+          rebuildGrid();
         }
       } catch (e) {}
     }
@@ -413,6 +416,9 @@
     });
     document.getElementById("addSpaceBtn").addEventListener("click", function () {
       addColumns(10);
+    });
+    document.getElementById("addHeightBtn").addEventListener("click", function () {
+      addRows(5);
     });
 
     loadLevel();
