@@ -137,7 +137,7 @@
       justify-content: center;
       pointer-events: none;
     }
-    .player-el { font-size: 24px; z-index: 5; }
+    .player-el { z-index: 5; image-rendering: pixelated; image-rendering: crisp-edges; }
 
     /* ---- Play HUD ---- */
     .play-hud {
@@ -645,9 +645,54 @@
     var pipeLinks = {}; // computed fresh each time Play starts: "row,col" of a pipe -> {row, col} of its nearest other pipe
     var startCol = 1, startRow = ROWS - 2;
     var playerEl = null;
+    var playerCtx = null;
     var entityEls = [];
     var activeEnemies = []; // {x, y, vx, vy, w, h, el, alive}
     var ENEMY_SPEED = 1;
+
+    /* ===================== PIXEL FROG SPRITE ===================== */
+    var SPRITE_PX = 4; // each sprite "pixel" is drawn this many canvas pixels wide/tall
+    var SPRITE_COLS = 8, SPRITE_ROWS = 8;
+    var FROG_PALETTE = { D: "#1b6b2e", G: "#4ad06a", W: "#ffffff", K: "#14261a", Y: "#bdf0a0" };
+
+    var FROG_IDLE = [
+      "..DDDD..",
+      ".DGGGGD.",
+      "DGWGGWGD",
+      "DGKGGKGD",
+      "DGGGGGGD",
+      "DYYYYYYD",
+      ".DD..DD.",
+      ".DD..DD."
+    ];
+    var FROG_WALK1 = FROG_IDLE.slice(0, 6).concat(["DD....DD", ".D....D."]);
+    var FROG_WALK2 = FROG_IDLE.slice(0, 6).concat(["..DDDD..", "..D..D.."]);
+    var FROG_JUMP = [
+      "..DDDD..",
+      ".DGGGGD.",
+      "DGWGGWGD",
+      "DGKGGKGD",
+      "DGGGGGGD",
+      "DYYDDYYD",
+      ".DD..DD.",
+      "........"
+    ];
+
+    function drawFrogFrame(ctx, frameRows) {
+      ctx.clearRect(0, 0, SPRITE_COLS * SPRITE_PX, SPRITE_ROWS * SPRITE_PX);
+      for (var r = 0; r < frameRows.length; r++) {
+        var row = frameRows[r];
+        for (var c = 0; c < row.length; c++) {
+          var ch = row[c];
+          if (ch === ".") continue;
+          ctx.fillStyle = FROG_PALETTE[ch];
+          ctx.fillRect(c * SPRITE_PX, r * SPRITE_PX, SPRITE_PX, SPRITE_PX);
+        }
+      }
+    }
+
+    var walkFrameTimer = 0;
+    var walkFrameToggle = false;
 
     var keys = { jump: false };
     var moving = true; // the froggy auto-runs; "S" toggles this on/off
@@ -678,7 +723,7 @@
     stopGoBtn.addEventListener("click", function () { toggleMoving(); });
 
     function clearEntityEls() {
-      if (playerEl) { playerEl.remove(); playerEl = null; }
+      if (playerEl) { playerEl.remove(); playerEl = null; playerCtx = null; }
       entityEls.forEach(function (el) { el.remove(); });
       entityEls = [];
       activeEnemies.forEach(function (e) { if (e.el) e.el.remove(); });
@@ -836,10 +881,15 @@
       stopGoBtn.textContent = "⏸️";
       updateHud();
 
-      playerEl = document.createElement("div");
+      playerEl = document.createElement("canvas");
       playerEl.className = "entity player-el";
-      playerEl.textContent = "🐸";
+      playerEl.width = SPRITE_COLS * SPRITE_PX;
+      playerEl.height = SPRITE_ROWS * SPRITE_PX;
       levelEl.appendChild(playerEl);
+      playerCtx = playerEl.getContext("2d");
+      walkFrameTimer = 0;
+      walkFrameToggle = false;
+      drawFrogFrame(playerCtx, FROG_IDLE);
 
       running = true;
       rafId = requestAnimationFrame(gameLoop);
@@ -964,6 +1014,16 @@
         playerEl.style.left = player.x + "px";
         playerEl.style.top = player.y + "px";
         playerEl.style.opacity = invulnerable ? (Math.floor(Date.now() / 100) % 2 ? "0.3" : "1") : "1";
+
+        if (!player.grounded) {
+          drawFrogFrame(playerCtx, FROG_JUMP);
+        } else if (moving) {
+          walkFrameTimer++;
+          if (walkFrameTimer >= 8) { walkFrameTimer = 0; walkFrameToggle = !walkFrameToggle; }
+          drawFrogFrame(playerCtx, walkFrameToggle ? FROG_WALK2 : FROG_WALK1);
+        } else {
+          drawFrogFrame(playerCtx, FROG_IDLE);
+        }
       }
 
       var viewportWidth = levelWrap.clientWidth;
