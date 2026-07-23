@@ -115,7 +115,13 @@
       border-color: rgba(0,0,0,0.25);
     }
     .cell.tile-cloud { background: #bfe6ff; border-color: rgba(255,255,255,0.6); }
-    .cell.tile-coin, .cell.tile-enemy, .cell.tile-start, .cell.tile-goal, .cell.tile-checkpoint { border-color: transparent; }
+    .cell.tile-coin, .cell.tile-enemy, .cell.tile-start, .cell.tile-goal, .cell.tile-checkpoint, .cell.tile-teleporter { border-color: transparent; }
+    .cell.tile-teleporter-unlinked { opacity: 0.5; }
+    .cell.tile-linking { animation: pulse-link 0.7s ease-in-out infinite; }
+    @keyframes pulse-link {
+      0%, 100% { background-color: rgba(255,224,102,0.15); }
+      50% { background-color: rgba(255,224,102,0.55); }
+    }
 
     .entity {
       position: absolute;
@@ -220,6 +226,7 @@
     <button class="tile-btn" data-tile="goal">🏁 Goal</button>
     <button class="tile-btn" data-tile="checkpoint">🚩 Checkpoint</button>
     <button class="tile-btn" data-tile="heart">❤️ Heart</button>
+    <button class="tile-btn" data-tile="teleporter">🌀 Teleporter</button>
     <button class="tile-btn" data-tile="eraser">🧹 Eraser</button>
   </div>
 
@@ -236,7 +243,7 @@
     <button class="touch-btn" id="stopGoBtn">⏸️</button>
     <button class="touch-btn" id="jumpBtn">⬆️</button>
   </div>
-  <p class="hint" id="buildHint">Pick a tile above, then tap the level to place it! 🚩 Checkpoints save your spot. Tap ➕ Add More Space to make your level longer!</p>
+  <p class="hint" id="buildHint">Pick a tile above, then tap the level to place it! 🚩 Checkpoints save your spot. 🌀 Place a Teleporter, tap it, then tap where it should send you! Tap ➕ Add More Space to make your level longer!</p>
   <p class="hint" id="playHint" style="display:none;">🐸 runs by itself — press <b>Space</b> to jump, and <b>S</b> to stop or go!</p>
 
   <div class="ctrl-row">
@@ -286,6 +293,8 @@
     var LEVELS_KEY = "bensLevelBuilderLevels";
     var levels = [];
     var currentLevelName = null;
+    var teleporterLinks = {}; // "row,col" of a teleporter -> {row, col} of where it sends you
+    var linkingTeleporter = null; // {row, col} of the teleporter currently waiting for you to tap its destination
 
     // levelData[row][col] = null | "ground" | "brick" | "coin" | "enemy" | "start" | "goal"
     function makeDefaultLevel() {
@@ -294,6 +303,7 @@
       for (var c = 0; c < COLS; c++) data[ROWS - 1][c] = "ground";
       data[ROWS - 2][2] = "start";
       data[ROWS - 2][COLS - 2] = "goal";
+      data[ROWS - 2][5] = "teleporter";
       data[ROWS - 2][10] = "coin";
       data[ROWS - 2][11] = "coin";
       data[ROWS - 2][12] = "coin";
@@ -310,7 +320,7 @@
     levelEl.style.width = LEVEL_W + "px";
     levelEl.style.height = LEVEL_H + "px";
 
-    var TILE_EMOJI = { coin: "🪙", enemy: "🐛", start: "🟢", goal: "🏁", checkpoint: "🚩", heart: "❤️", cloud: "☁️" };
+    var TILE_EMOJI = { coin: "🪙", enemy: "🐛", start: "🟢", goal: "🏁", checkpoint: "🚩", heart: "❤️", cloud: "☁️", teleporter: "🌀" };
 
     var cellButtons = []; // cellButtons[row][col]
 
@@ -358,6 +368,13 @@
 
     function addRows(n) {
       for (var i = 0; i < n; i++) levelData.unshift(new Array(COLS).fill(null));
+      var shiftedLinks = {};
+      Object.keys(teleporterLinks).forEach(function (key) {
+        var parts = key.split(",");
+        var link = teleporterLinks[key];
+        shiftedLinks[(parseInt(parts[0], 10) + n) + "," + parts[1]] = { row: link.row + n, col: link.col };
+      });
+      teleporterLinks = shiftedLinks;
       ROWS += n;
       LEVEL_H = ROWS * CELL;
       rebuildGrid();
@@ -377,6 +394,15 @@
       var removeCount = ROWS - newRows;
       if (removeCount <= 0) return;
       for (var i = 0; i < removeCount; i++) levelData.shift();
+      var shiftedLinks = {};
+      Object.keys(teleporterLinks).forEach(function (key) {
+        var parts = key.split(",");
+        var r = parseInt(parts[0], 10);
+        var link = teleporterLinks[key];
+        if (r < removeCount || link.row < removeCount) return; // this teleporter or its destination got removed
+        shiftedLinks[(r - removeCount) + "," + parts[1]] = { row: link.row - removeCount, col: link.col };
+      });
+      teleporterLinks = shiftedLinks;
       ROWS = newRows;
       LEVEL_H = ROWS * CELL;
       rebuildGrid();
@@ -387,6 +413,12 @@
       var btn = cellButtons[row][col];
       btn.className = "cell" + (tile === "ground" ? " tile-ground" : tile === "brick" ? " tile-brick" : tile === "cloud" ? " tile-cloud" : "");
       btn.textContent = (tile && TILE_EMOJI[tile]) ? TILE_EMOJI[tile] : "";
+      if (tile === "teleporter" && !teleporterLinks[row + "," + col]) {
+        btn.classList.add("tile-teleporter-unlinked");
+      }
+      if (linkingTeleporter && linkingTeleporter.row === row && linkingTeleporter.col === col) {
+        btn.classList.add("tile-linking");
+      }
     }
 
     function renderAllCells() {
@@ -414,8 +446,25 @@
 
     function placeTile(row, col) {
       if (buildMode !== true) return;
+
+      if (linkingTeleporter) {
+        var fromRow = linkingTeleporter.row, fromCol = linkingTeleporter.col;
+        if (row === fromRow && col === fromCol) {
+          linkingTeleporter = null; // tapped itself again — cancel linking
+        } else {
+          teleporterLinks[fromRow + "," + fromCol] = { row: row, col: col };
+          linkingTeleporter = null;
+        }
+        renderCell(fromRow, fromCol);
+        return;
+      }
+
       if (currentTool === "eraser") {
+        if (levelData[row][col] === "teleporter") delete teleporterLinks[row + "," + col];
         levelData[row][col] = null;
+      } else if (levelData[row][col] === "teleporter") {
+        // tapping an already-placed teleporter starts linking instead of restamping it
+        linkingTeleporter = { row: row, col: col };
       } else {
         if (currentTool === "start" || currentTool === "goal") clearTileTypeFromLevel(currentTool);
         levelData[row][col] = currentTool;
@@ -425,7 +474,7 @@
 
     /* ===================== SAVE / LOAD ===================== */
     function saveLevel() {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(levelData)); } catch (e) {}
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ data: levelData, links: teleporterLinks })); } catch (e) {}
     }
 
     function loadLevel() {
@@ -433,9 +482,12 @@
       try { raw = localStorage.getItem(STORAGE_KEY); } catch (e) { return; }
       if (!raw) return;
       try {
-        var data = JSON.parse(raw);
+        var parsed = JSON.parse(raw);
+        var data = Array.isArray(parsed) ? parsed : parsed.data; // Array.isArray(parsed) = an older save from before teleporters
+        var links = (parsed && !Array.isArray(parsed) && parsed.links) ? parsed.links : {};
         if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0])) {
           levelData = data;
+          teleporterLinks = links;
           ROWS = data.length;
           COLS = data[0].length;
           LEVEL_W = COLS * CELL;
@@ -448,6 +500,8 @@
     document.getElementById("saveLevelBtn").addEventListener("click", saveLevel);
     document.getElementById("clearLevelBtn").addEventListener("click", function () {
       levelData = makeDefaultLevel();
+      teleporterLinks = {};
+      linkingTeleporter = null;
       renderAllCells();
     });
     document.getElementById("addSpaceBtn").addEventListener("click", function () {
@@ -480,6 +534,8 @@
       var lvl = levels[index];
       if (!lvl) return;
       levelData = JSON.parse(JSON.stringify(lvl.data));
+      teleporterLinks = lvl.links ? JSON.parse(JSON.stringify(lvl.links)) : {};
+      linkingTeleporter = null;
       ROWS = levelData.length;
       COLS = levelData[0] ? levelData[0].length : COLS;
       LEVEL_W = COLS * CELL;
@@ -536,6 +592,8 @@
       LEVEL_W = COLS * CELL;
       LEVEL_H = ROWS * CELL;
       levelData = makeDefaultLevel();
+      teleporterLinks = {};
+      linkingTeleporter = null;
       currentLevelName = null;
       rebuildGrid();
       enterBuildMode();
@@ -556,7 +614,7 @@
       name = name.trim();
       if (!name) return;
       var existingIndex = levels.findIndex(function (lvl) { return lvl.name === name; });
-      var entry = { name: name, data: levelData };
+      var entry = { name: name, data: levelData, links: teleporterLinks };
       if (existingIndex >= 0) levels[existingIndex] = entry;
       else levels.push(entry);
       currentLevelName = name;
@@ -604,6 +662,7 @@
       playHint.style.display = "block";
       playHud.style.display = "flex";
       touchControls.style.display = "flex";
+      linkingTeleporter = null;
       startPlay();
     }
 
@@ -626,6 +685,7 @@
     var lives = 3;
     var running = false;
     var invulnerable = false;
+    var teleportCooldown = false;
     var startCol = 1, startRow = ROWS - 2;
     var playerEl = null;
     var entityEls = [];
@@ -793,6 +853,7 @@
       lives = 3;
       invulnerable = false;
       moving = true;
+      teleportCooldown = false;
       stopGoBtn.textContent = "⏸️";
       updateHud();
 
@@ -861,6 +922,17 @@
               renderCell(r, c);
               lives++;
               updateHud();
+            }
+          } else if (tile === "teleporter") {
+            if (!teleportCooldown && rectsOverlap(player.x, player.y, PW, PH, tx, ty, CELL, CELL)) {
+              var link = teleporterLinks[r + "," + c];
+              if (link) {
+                player.x = link.col * CELL + (CELL - PW) / 2;
+                player.y = link.row * CELL + (CELL - PH);
+                player.vy = 0;
+                teleportCooldown = true;
+                setTimeout(function () { teleportCooldown = false; }, 500);
+              }
             }
           }
         }
